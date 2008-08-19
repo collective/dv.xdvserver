@@ -17,6 +17,15 @@ IGNORE_EXTENSIONS = ['js', 'css', 'gif', 'jpg', 'jpeg', 'pdf', 'ps', 'doc',
 
 IGNORE_URL_PATTERN = re.compile("^.*\.(%s)$" % '|'.join(IGNORE_EXTENSIONS))
 HTML_DOC_PATTERN = re.compile(r"^.*<\s*html(\s*|>).*$",re.I|re.M)
+IMPORT_STYLESHEET_PATTERN = re.compile('@import url\\([\'"](.+)[\'"]\\);', re.I)
+
+def to_absolute(src, prefix):
+    if not (src.startswith('/') or '://' in src):
+        if src.startswith('./'):
+            return "%s/%s" % (prefix, src[:2])
+        else:
+            return "%s/%s" % (prefix, src)
+    return src
 
 class XSLTMiddleware(object):
     """Apply XSLT in middleware
@@ -101,7 +110,8 @@ class XDVMiddleware(object):
     """Invoke the Deliverance xdv transform as middleware
     """
     
-    def __init__(self, app, global_conf, theme_uri, rules, compiler=None, boilerplate=None, live=False):
+    def __init__(self, app, global_conf, theme_uri, rules, compiler=None,
+                    boilerplate=None, live=False, absolute_prefix=None):
         """Create the middleware. The parameters are:
         
             theme_uri
@@ -118,6 +128,9 @@ class XDVMiddleware(object):
             live
                 If set to true, the theme will be recompiled on each
                 request. The default is to compile the theme on startup only.
+            absolute_prefix
+                If set to a string, then all relative image and CSS references
+                in the theme will be prefixed by this string.
         """
         self.app = app
         self.global_conf = global_conf
@@ -127,6 +140,8 @@ class XDVMiddleware(object):
         self.compiler = compiler
         self.boilerplate = boilerplate
         self.rules = rules
+        
+        self.absolute_prefix = absolute_prefix
 
         if compiler is None:
             self.compiler = os.path.join(os.path.split(__file__)[0], 'compiler', 'compiler.xsl')
@@ -155,6 +170,19 @@ class XDVMiddleware(object):
         parser = etree.HTMLParser()
         theme_tree = etree.ElementTree(file=theme, parser=parser)
         theme.close()
+        
+        if self.absolute_prefix:
+            for node in theme_tree.xpath('*//style | *//img | *//link'):
+                if node.tag == 'img':
+                    src = node.get('src')
+                    if src:
+                        node.set('src', to_absolute(src, self.absolute_prefix))
+                elif node.tag == 'link':
+                    href = node.get('href')
+                    if href:
+                        node.set('href', to_absolute(href, self.absolute_prefix))
+                elif node.tag == 'style':
+                    node.text = IMPORT_STYLESHEET_PATTERN.sub('@import url("%s/\\1");' % self.absolute_prefix, node.text)
         
         compiled = compiler_transform(theme_tree,
                                       rulesuri="'%s'" % self.rules,
