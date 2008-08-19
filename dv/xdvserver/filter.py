@@ -172,8 +172,8 @@ class XDVMiddleware(object):
         theme.close()
         
         if self.absolute_prefix:
-            for node in theme_tree.xpath('*//style | *//img | *//link'):
-                if node.tag == 'img':
+            for node in theme_tree.xpath('*//style | *//script | *//img | *//link'):
+                if node.tag == 'img' or node.tag == 'script':
                     src = node.get('src')
                     if src:
                         node.set('src', to_absolute(src, self.absolute_prefix))
