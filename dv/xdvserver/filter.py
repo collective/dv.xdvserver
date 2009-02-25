@@ -1,6 +1,5 @@
 import os.path
 import re
-import urllib2
 
 from lxml import etree
 
@@ -8,6 +7,8 @@ from paste.request import construct_url
 from paste.response import header_value, replace_header
 from paste.wsgilib import intercept_output
 from paste.deploy.converters import asbool
+
+from dv.xdvserver.xdvcompiler import compile_theme
 
 IGNORE_EXTENSIONS = ['js', 'css', 'gif', 'jpg', 'jpeg', 'pdf', 'ps', 'doc',
                      'png', 'ico', 'mov', 'mpg', 'mpeg', 'mp3', 'm4a', 'txt',
@@ -18,14 +19,6 @@ IGNORE_EXTENSIONS = ['js', 'css', 'gif', 'jpg', 'jpeg', 'pdf', 'ps', 'doc',
 IGNORE_URL_PATTERN = re.compile("^.*\.(%s)$" % '|'.join(IGNORE_EXTENSIONS))
 HTML_DOC_PATTERN = re.compile(r"^.*<\s*html(\s*|>).*$",re.I|re.M)
 IMPORT_STYLESHEET_PATTERN = re.compile('@import url\\([\'"](.+)[\'"]\\);', re.I)
-
-def to_absolute(src, prefix):
-    if not (src.startswith('/') or '://' in src):
-        if src.startswith('./'):
-            return "%s/%s" % (prefix, src[:2])
-        else:
-            return "%s/%s" % (prefix, src)
-    return src
 
 class XSLTMiddleware(object):
     """Apply XSLT in middleware
@@ -162,37 +155,11 @@ class XDVMiddleware(object):
             self.transform = XSLTMiddleware(app, global_conf, xslt_source=self.compile_theme())
     
     def compile_theme(self):
-        compiler = open(self.compiler)
-        compiler_transform = etree.XSLT(etree.ElementTree(file=compiler))
-        compiler.close()
-        
-        theme = urllib2.urlopen(self.theme_uri)
-        parser = etree.HTMLParser()
-        theme_tree = etree.ElementTree(file=theme, parser=parser)
-        theme.close()
-        
-        if self.absolute_prefix:
-            for node in theme_tree.xpath('*//style | *//script | *//img | *//link'):
-                if node.tag == 'img' or node.tag == 'script':
-                    src = node.get('src')
-                    if src:
-                        node.set('src', to_absolute(src, self.absolute_prefix))
-                elif node.tag == 'link':
-                    href = node.get('href')
-                    if href:
-                        node.set('href', to_absolute(href, self.absolute_prefix))
-                elif node.tag == 'style':
-                    node.text = IMPORT_STYLESHEET_PATTERN.sub('@import url("%s/\\1");' % self.absolute_prefix, node.text)
-        
-        compiled = compiler_transform(theme_tree,
-                                      rulesuri="'%s'" % self.rules,
-                                      boilerplateurl="'%s'" % self.boilerplate)
-        
-        return etree.tostring(compiled)
+        return compile_theme(self.compiler, self.theme_uri, self.rules,
+                             self.boilerplate, self.absolute_prefix)
     
     def __call__(self, environ, start_response):
         transform = self.transform
         if self.live:
             transform = XSLTMiddleware(self.app, self.global_conf, xslt_source=self.compile_theme())
         return transform(environ, start_response)
-        

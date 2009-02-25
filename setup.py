@@ -31,6 +31,9 @@ setup(name='dv.xdvserver',
           # -*- Extra requirements: -*-
       ],
       entry_points="""
+      [console_scripts]
+      xdvcompiler = dv.xdvserver.xdvcompiler:compile
+      
       [paste.filter_app_factory]
       xslt = dv.xdvserver.filter:XSLTMiddleware
       xdv = dv.xdvserver.filter:XDVMiddleware
