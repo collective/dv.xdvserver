@@ -24,7 +24,12 @@ def compile_theme(compiler, theme_uri, rules, boilerplate, absolute_prefix=None)
     compiler_transform = etree.XSLT(etree.ElementTree(file=compiler))
     compiler.close()
     
-    theme = urllib2.urlopen(theme_uri)
+    try:
+        theme = urllib2.urlopen(theme_uri)
+    except:
+        # Allow local file paths too
+        theme = open(theme_uri)
+        
     parser = etree.HTMLParser()
     theme_tree = etree.ElementTree(file=theme, parser=parser)
     theme.close()
@@ -42,9 +47,11 @@ def compile_theme(compiler, theme_uri, rules, boilerplate, absolute_prefix=None)
             elif node.tag == 'style':
                 node.text = IMPORT_STYLESHEET_PATTERN.sub('@import url("%s/\\1");' % absolute_prefix, node.text)
     
-    compiled = compiler_transform(theme_tree,
-                                  rulesuri="'%s'" % rules,
-                                  boilerplateurl="'%s'" % boilerplate)
+    params = dict(rulesuri="'%s'" % rules)
+    if boilerplate:
+        params['boilerplateurl'] = "'%s'" % boilerplate
+    
+    compiled = compiler_transform(theme_tree, **params)
     
     return etree.tostring(compiled)
     
@@ -83,10 +90,6 @@ def compile():
 
     if options.compiler is None:
         options.compiler = os.path.join(os.path.split(__file__)[0], 'compiler', 'compiler.xsl')
-    if options.boilerplate is None:
-        options.boilerplate = os.path.join(os.path.split(__file__)[0], 'compiler', 'boilerplate.xsl')
-    
-    
     
     output_xslt = compile_theme(options.compiler, options.theme,
                                 options.rules, options.boilerplate,

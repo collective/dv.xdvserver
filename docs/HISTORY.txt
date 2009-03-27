@@ -1,8 +1,15 @@
 Changelog
 =========
 
+1.0b3 - 2009-03-26
+------------------
+
+* We now allow local file paths as the theme uri, and let compiler.xsl pick
+  its own boilerplate.xsl by default if none is given.
+  [optilude]
+
 1.0b2 - 2009-02-25
-----------------
+------------------
 
 * Added console script for compiling the theme offline
   [optilude]
