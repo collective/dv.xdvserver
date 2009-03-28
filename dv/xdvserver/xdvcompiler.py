@@ -2,6 +2,7 @@ from optparse import OptionParser
 
 import os.path
 import re
+import sys
 import urllib2
 
 from lxml import etree
@@ -47,14 +48,25 @@ def compile_theme(compiler, theme_uri, rules, boilerplate, absolute_prefix=None)
             elif node.tag == 'style':
                 node.text = IMPORT_STYLESHEET_PATTERN.sub('@import url("%s/\\1");' % absolute_prefix, node.text)
     
-    params = dict(rulesuri="'%s'" % rules)
+    params = dict(rulesuri="'%s'" % prepare_filename(rules))
     if boilerplate:
-        params['boilerplateurl'] = "'%s'" % boilerplate
+        params['boilerplateurl'] = "'%s'" % prepare_filename(boilerplate)
     
     compiled = compiler_transform(theme_tree, **params)
     
     return etree.tostring(compiled)
+
+def prepare_filename(filename):
+    """Make file name string parameters compatible with xdv's compiler.xsl
+    """
     
+    filename = os.path.abspath(filename)
+    if sys.platform.startswith('win'):
+        # compiler.xsl on Windows wants c:/foo/bar instead of C:\foo\bar
+        filename = filename.replace('\\', '/')
+        
+    return filename
+
 def compile():
     """Called fromconsole script
     """

@@ -139,13 +139,11 @@ class XDVMiddleware(object):
         if compiler is None:
             self.compiler = os.path.join(os.path.split(__file__)[0], 'compiler', 'compiler.xsl')
 
-        if boilerplate is None:
-            self.boilerplate = os.path.join(os.path.split(__file__)[0], 'compiler', 'boilerplate.xsl')
-        
         if not os.path.isfile(self.compiler):
             raise ValueError("Compiler XSLT %s does not exist" % self.compiler)
-        if not os.path.isfile(self.boilerplate):
+        if boilerplate and not os.path.isfile(self.boilerplate):
             raise ValueError("Boilerplate XSLT %s does not exist" % self.boilerplate)
+        
         if not os.path.isfile(self.rules):
             raise ValueError("Rules file %s does not exist" % self.rules)
         
