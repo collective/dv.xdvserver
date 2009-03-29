@@ -17,7 +17,7 @@ def to_absolute(src, prefix):
             return "%s/%s" % (prefix, src)
     return src
 
-def compile_theme(compiler, theme_uri, rules, boilerplate, absolute_prefix=None):
+def compile_theme(compiler, theme, rules, boilerplate, absolute_prefix=None):
     """Invoke the xdv compiler
     """
     
@@ -26,10 +26,10 @@ def compile_theme(compiler, theme_uri, rules, boilerplate, absolute_prefix=None)
     compiler.close()
     
     try:
-        theme = urllib2.urlopen(theme_uri)
+        theme = urllib2.urlopen(theme)
     except:
         # Allow local file paths too
-        theme = open(theme_uri)
+        theme = open(theme)
         
     parser = etree.HTMLParser()
     theme_tree = etree.ElementTree(file=theme, parser=parser)

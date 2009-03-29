@@ -7,10 +7,16 @@ step compile-and-run XSLT transforms of xdv.
 It takes two required parameters:
 
  - rules: a path to a file containing Deliverance rules
- - theme_uri: a URI to a theme HTML file
+ - theme: a URI or path to a theme HTML file
 
 In addition, it can take several optional parameters:
 
+ - absolute_prefix: if given, relative urls in the theme file will be made
+    into absolute links with this prefix.
+ - notheme: a set of regular expression patterns (or just simple names) that
+    will be matched against the incoming path to allow the theme to be
+    switched off for some paths. Multiple patterns should be separated by
+    newlines.
  - live: set to True to recompile the theme on each request, rather than on
     startup only.
  - compiler: a path to the XSLT file that can turn theme+rules into a compiled
@@ -48,8 +54,10 @@ http://localhost:8080/demo. Static resources are served from /static.
 
     [filter:theme.default]
     use = egg:dv.xdvserver#xdv
-    theme_uri = file://%(here)s/static/index.html
+    theme = %(here)s/static/index.html
     rules = %(here)s/static/rules/default.xml
+    notheme =
+        /emptypage
 
     [app:zope.proxy]
     use = egg:Paste#proxy

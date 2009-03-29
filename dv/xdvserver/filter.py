@@ -117,12 +117,12 @@ class XDVMiddleware(object):
     """Invoke the Deliverance xdv transform as middleware
     """
     
-    def __init__(self, app, global_conf, theme_uri, rules, compiler=None,
+    def __init__(self, app, global_conf, theme, rules, compiler=None,
                     boilerplate=None, live=False, absolute_prefix=None, notheme=None):
         """Create the middleware. The parameters are:
         
-            theme_uri
-                URI from which to pull the theme
+            theme
+                URI or file name from which to pull the theme
             rules
                 Filename or path to the rules file
             compiler
@@ -146,7 +146,7 @@ class XDVMiddleware(object):
         self.app = app
         self.global_conf = global_conf
         
-        self.theme_uri = theme_uri
+        self.theme = theme
         
         self.compiler = compiler
         self.boilerplate = boilerplate
@@ -170,7 +170,7 @@ class XDVMiddleware(object):
         self.transform = self.get_transform()
     
     def compile_theme(self):
-        return compile_theme(self.compiler, self.theme_uri, self.rules,
+        return compile_theme(self.compiler, self.theme, self.rules,
                              self.boilerplate, self.absolute_prefix)
     
     def get_transform(self):
