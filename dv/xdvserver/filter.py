@@ -24,7 +24,7 @@ class XSLTMiddleware(object):
     """Apply XSLT in middleware
     """
     
-    def __init__(self, app, global_conf, xslt_file=None, xslt_source=""):
+    def __init__(self, app, global_conf, ignore_paths=None, xslt_file=None, xslt_source=""):
         """Initialise, giving a filename or file pointer for an XSLT file.
         """
         
@@ -40,13 +40,19 @@ class XSLTMiddleware(object):
         xslt_tree = etree.fromstring(xslt_source)
         self.transform = etree.XSLT(xslt_tree)
         
+        self.ignore_paths = []
+        if ignore_paths:
+            ignore_paths = [s.strip() for s in ignore_paths.split('\n') if s.strip()]
+            for p in ignore_paths:
+                self.ignore_paths.append(re.compile(p))
+        
     def should_intercept(self, status, headers):
         """Callback to determine if the content should be intercepted
         """
         apply_theme = not header_value(headers, 'x-deliverance-no-theme')
         if not apply_theme:
             return False
-
+        
         content_type = header_value(headers, 'content-type')
         if content_type is None:
             return True # 304s can have no content-type 
@@ -61,8 +67,10 @@ class XSLTMiddleware(object):
     
     def __call__(self, environ, start_response):
         
-        if not environ['PATH_INFO']:
-            environ['PATH_INFO'] = '/'
+        path = environ['PATH_INFO']
+        
+        if not path:
+            path = environ['PATH_INFO'] = '/'
         
         status, headers, body = intercept_output(environ, self.app,
                                                  self.should_intercept,
@@ -71,6 +79,12 @@ class XSLTMiddleware(object):
         # self.should_intercept returned nada
         if status is None:
             return body
+        
+        # don't style if the url should not be styled
+        for pattern in self.ignore_paths:
+            if pattern.match(path):
+                start_response(status, headers)
+                return [body]
         
         # short circuit from theming if this is not likely to be HTML
         content_url = construct_url(environ)
@@ -104,7 +118,7 @@ class XDVMiddleware(object):
     """
     
     def __init__(self, app, global_conf, theme_uri, rules, compiler=None,
-                    boilerplate=None, live=False, absolute_prefix=None):
+                    boilerplate=None, live=False, absolute_prefix=None, notheme=None):
         """Create the middleware. The parameters are:
         
             theme_uri
@@ -124,7 +138,11 @@ class XDVMiddleware(object):
             absolute_prefix
                 If set to a string, then all relative image and CSS references
                 in the theme will be prefixed by this string.
+            notheme
+                Newline-separtated list of paths that should not be themed.
+                May include regular expressions.
         """
+        
         self.app = app
         self.global_conf = global_conf
         
@@ -148,16 +166,19 @@ class XDVMiddleware(object):
             raise ValueError("Rules file %s does not exist" % self.rules)
         
         self.live = asbool(live)
-        self.transform = None
-        if not live:
-            self.transform = XSLTMiddleware(app, global_conf, xslt_source=self.compile_theme())
+        self.notheme = notheme
+        self.transform = self.get_transform()
     
     def compile_theme(self):
         return compile_theme(self.compiler, self.theme_uri, self.rules,
                              self.boilerplate, self.absolute_prefix)
     
+    def get_transform(self):
+        return XSLTMiddleware(self.app, self.global_conf, 
+                                ignore_paths=self.notheme, xslt_source=self.compile_theme())
+    
     def __call__(self, environ, start_response):
         transform = self.transform
         if self.live:
-            transform = XSLTMiddleware(self.app, self.global_conf, xslt_source=self.compile_theme())
+            transform = self.get_transform()
         return transform(environ, start_response)
