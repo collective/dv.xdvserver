@@ -118,7 +118,8 @@ class XDVMiddleware(object):
     """
     
     def __init__(self, app, global_conf, theme, rules, compiler=None,
-                    boilerplate=None, live=False, absolute_prefix=None, notheme=None):
+                    boilerplate=None, live=False, absolute_prefix=None, notheme=None,
+                    theme_uri=None):
         """Create the middleware. The parameters are:
         
             theme
@@ -147,6 +148,10 @@ class XDVMiddleware(object):
         self.global_conf = global_conf
         
         self.theme = theme
+        
+        # For BBB
+        if not theme and theme_uri:
+            self.theme = theme_uri
         
         self.compiler = compiler
         self.boilerplate = boilerplate
