@@ -119,7 +119,7 @@ class XDVMiddleware(object):
     
     def __init__(self, app, global_conf, theme, rules, compiler=None,
                     boilerplate=None, live=False, absolute_prefix=None, notheme=None,
-                    theme_uri=None):
+                    theme_uri=None, extraurl=None):
         """Create the middleware. The parameters are:
         
             theme
@@ -142,6 +142,9 @@ class XDVMiddleware(object):
             notheme
                 Newline-separtated list of paths that should not be themed.
                 May include regular expressions.
+            extraurl
+                Optional filename or path to an extra xslt file that will be used 
+                when compiling
         """
         
         self.app = app
@@ -155,6 +158,7 @@ class XDVMiddleware(object):
         
         self.compiler = compiler
         self.boilerplate = boilerplate
+        self.extraurl = extraurl
         self.rules = rules
         
         self.absolute_prefix = absolute_prefix
@@ -166,6 +170,8 @@ class XDVMiddleware(object):
             raise ValueError("Compiler XSLT %s does not exist" % self.compiler)
         if boilerplate and not os.path.isfile(self.boilerplate):
             raise ValueError("Boilerplate XSLT %s does not exist" % self.boilerplate)
+        if extraurl and not os.path.isfile(self.extraurl):
+            raise ValueError("Extraurl XSLT %s does not exist" % self.extraurl)
         
         if not os.path.isfile(self.rules):
             raise ValueError("Rules file %s does not exist" % self.rules)
@@ -176,7 +182,7 @@ class XDVMiddleware(object):
     
     def compile_theme(self):
         return compile_theme(self.compiler, self.theme, self.rules,
-                             self.boilerplate, self.absolute_prefix)
+                             self.boilerplate, self.absolute_prefix, self.extraurl)
     
     def get_transform(self):
         return XSLTMiddleware(self.app, self.global_conf, 

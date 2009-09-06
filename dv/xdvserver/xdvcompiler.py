@@ -17,7 +17,7 @@ def to_absolute(src, prefix):
             return "%s/%s" % (prefix, src)
     return src
 
-def compile_theme(compiler, theme, rules, boilerplate, absolute_prefix=None):
+def compile_theme(compiler, theme, rules, boilerplate, absolute_prefix=None, extraurl=None):
     """Invoke the xdv compiler
     """
     
@@ -52,6 +52,9 @@ def compile_theme(compiler, theme, rules, boilerplate, absolute_prefix=None):
     if boilerplate:
         params['boilerplateurl'] = "'%s'" % prepare_filename(boilerplate)
     
+    if extraurl:
+        params['extraurl'] = "'%s'" % prepare_filename(extraurl)
+        
     compiled = compiler_transform(theme_tree, **params)
     
     return etree.tostring(compiled)
@@ -85,6 +88,9 @@ def compile():
     parser.add_option("-b", "--boilerplate", metavar="boilerplate.xsl",
                       help="XDV boilerplate XSLT file",
                       dest="boilerplate", default=None)
+    parser.add_option("-e", "--extraurl", metavar="extraurl.xsl",
+                      help="XDV extraurl XSLT file",
+                      dest="extraurl", default=None)
     parser.add_option("-a", "--absolute-prefix", dest="absolute_prefix", metavar="http://example.org/mysite",
                       help="URL prefix used to turn relative links into absolute ones",
                       default=None)
@@ -105,7 +111,7 @@ def compile():
     
     output_xslt = compile_theme(options.compiler, options.theme,
                                 options.rules, options.boilerplate,
-                                options.absolute_prefix)
+                                options.absolute_prefix, options.extraurl)
     
     output = open(args[0], 'w')
     output.write(output_xslt)
