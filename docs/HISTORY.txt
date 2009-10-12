@@ -1,8 +1,11 @@
 Changelog
 =========
 
-1.0b5 - unreleased
+1.0b5 - 2009-10-12
 ------------------
+
+* Re-licensed to the BSD license.
+  [optilude]
 
 * Added support for the `extrauri` parameter.
   [Matous Hora]
