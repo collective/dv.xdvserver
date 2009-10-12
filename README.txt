@@ -30,7 +30,7 @@ Configuration
 
 You can use this middleware in a Paste Deploy pipeline. Here is an example 
 configuration file of an application that themes a Plone site running on
-http://localhost:8080/demo. Static resources are served from /static.
+http://localhost:8080/demo. Static resources are served from /static::
 
     [server:main]
     use = egg:Paste#http
