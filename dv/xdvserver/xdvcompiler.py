@@ -12,7 +12,7 @@ IMPORT_STYLESHEET_PATTERN = re.compile('@import url\\([\'"](.+)[\'"]\\);', re.I)
 def to_absolute(src, prefix):
     if not (src.startswith('/') or '://' in src):
         if src.startswith('./'):
-            return "%s/%s" % (prefix, src[:2])
+            return "%s/%s" % (prefix, src[2:])
         else:
             return "%s/%s" % (prefix, src)
     return src
