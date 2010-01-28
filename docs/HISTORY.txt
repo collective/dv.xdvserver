@@ -7,6 +7,9 @@ Changelog
 * Apply patch from Lukas Zdych to fix absolute prefix.
   [optilude]
 
+* Added through the web resolving of the rules file.
+  [Marshall Scorcio]
+
 1.0b6 - 2009-10-27
 ------------------
 

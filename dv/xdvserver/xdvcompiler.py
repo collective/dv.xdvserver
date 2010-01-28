@@ -9,6 +9,14 @@ from lxml import etree
 
 IMPORT_STYLESHEET_PATTERN = re.compile('@import url\\([\'"](.+)[\'"]\\);', re.I)
 
+class WWWResolver(etree.Resolver):
+    def resolve(self, system_url, public_id, context):
+        try:
+            data = urllib2.urlopen(system_url)
+            return self.resolve_string(data.read(), context)
+        except:
+            pass
+
 def to_absolute(src, prefix):
     if not (src.startswith('/') or '://' in src):
         if src.startswith('./'):
@@ -22,7 +30,9 @@ def compile_theme(compiler, theme, rules, boilerplate, absolute_prefix=None, ext
     """
     
     compiler = open(compiler)
-    compiler_transform = etree.XSLT(etree.ElementTree(file=compiler))
+    compiler_tree = etree.ElementTree(file=compiler)
+    compiler_tree.parser.resolvers.add(WWWResolver())
+    compiler_transform = etree.XSLT(compiler_tree)
     compiler.close()
     
     try:
@@ -62,11 +72,12 @@ def compile_theme(compiler, theme, rules, boilerplate, absolute_prefix=None, ext
 def prepare_filename(filename):
     """Make file name string parameters compatible with xdv's compiler.xsl
     """
-    
-    filename = os.path.abspath(filename)
-    if sys.platform.startswith('win'):
-        # compiler.xsl on Windows wants c:/foo/bar instead of C:\foo\bar
-        filename = filename.replace('\\', '/')
+
+    if not re.match('(http|https|ftp)://', filename.lower()):
+        filename = os.path.abspath(filename)
+        if sys.platform.startswith('win'):
+            # compiler.xsl on Windows wants c:/foo/bar instead of C:\foo\bar
+            filename = filename.replace('\\', '/')
         
     return filename
 
