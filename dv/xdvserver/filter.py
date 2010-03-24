@@ -1,5 +1,7 @@
-import os.path
 import re
+import urllib2
+import pkg_resources
+import os.path
 
 from lxml import etree
 
@@ -8,7 +10,7 @@ from paste.response import header_value, replace_header
 from paste.wsgilib import intercept_output
 from paste.deploy.converters import asbool
 
-from dv.xdvserver.xdvcompiler import compile_theme
+from xdv.copmiler import compile_theme
 
 IGNORE_EXTENSIONS = ['js', 'css', 'gif', 'jpg', 'jpeg', 'pdf', 'ps', 'doc',
                      'png', 'ico', 'mov', 'mpg', 'mpeg', 'mp3', 'm4a', 'txt',
@@ -18,7 +20,49 @@ IGNORE_EXTENSIONS = ['js', 'css', 'gif', 'jpg', 'jpeg', 'pdf', 'ps', 'doc',
 
 IGNORE_URL_PATTERN = re.compile("^.*\.(%s)$" % '|'.join(IGNORE_EXTENSIONS))
 HTML_DOC_PATTERN = re.compile(r"^.*<\s*html(\s*|>).*$",re.I|re.M)
-IMPORT_STYLESHEET_PATTERN = re.compile('@import url\\([\'"](.+)[\'"]\\);', re.I)
+
+class ExternalResolver(etree.Resolver):
+    """Resolver for external absolute paths (including protocol)
+    """
+    
+    def resolve(self, system_url, public_id, context):
+        
+        # Expand python:// URI to file:// URI
+        url = resolveURL(system_url.lower())
+        
+        # Resolve file:// URIs as absolute file paths
+        if url.startswith('file://'):
+            filename = url[7:]
+            return self.resolve_filename(filename, context)
+        
+        # Resolve other standard URIs with urllib2
+        if (
+            url.startswith('http://') or
+            url.startswith('https://') or
+            url.startswith('ftp://')
+        ):
+            return self.resolve_file(urllib2.urlopen(url), context)
+
+def resolveURL(url):
+    """Resolve the input URL to an actual URL.
+    
+    This can resolve python://dotted.package.name/file/path URLs to file://
+    URIs.
+    """
+    
+    if not url:
+        return url
+    
+    if url.lower().startswith('python://'):
+        spec = url[9:]
+        filename = pkg_resources.resource_filename(*spec.split('/', 1))
+        if filename:
+            if os.path.sep != '/':
+                filename = filename.replace(os.path.sep, '/')
+                return 'file:///%s' % filename
+            return 'file://%s' % filename
+    
+    return url
 
 class XSLTMiddleware(object):
     """Apply XSLT in middleware
@@ -42,7 +86,7 @@ class XSLTMiddleware(object):
         
         self.ignore_paths = []
         if ignore_paths:
-            ignore_paths = [s.strip() for s in ignore_paths.split('\n') if s.strip()]
+            ignore_paths = [s.strip() for s in ignore_paths if s.strip()]
             for p in ignore_paths:
                 self.ignore_paths.append(re.compile(p))
         
@@ -117,79 +161,90 @@ class XDVMiddleware(object):
     """Invoke the Deliverance xdv transform as middleware
     """
     
-    def __init__(self, app, global_conf, theme, rules, compiler=None,
-                    boilerplate=None, live=False, absolute_prefix=None, notheme=None,
-                    theme_uri=None, extraurl=None):
+    def __init__(self, app, global_conf, live=False, rules=None, theme=None, extra=None,
+                 css=True, xinclude=False, absolute_prefix=None, update=False,
+                 includemode='document', notheme=None,
+                 # BBB parameters
+                 theme_uri=None, extraurl=None):
         """Create the middleware. The parameters are:
         
-            theme
-                URI or file name from which to pull the theme
-            rules
-                Filename or path to the rules file
-            compiler
-                Filename or path to the compiler XSLT. A bundled version of
-                the xdv compiler.xsl will be used if this is not set.
-            boilerplate
-                Filename or path to the boilerplate XSLT file that the
-                compiler expects to be able to use. A bundled version from
-                xdv will be used if this is not set.
-            live
-                If set to true, the theme will be recompiled on each
-                request. The default is to compile the theme on startup only.
-            absolute_prefix
-                If set to a string, then all relative image and CSS references
-                in the theme will be prefixed by this string.
-            notheme
-                Newline-separtated list of paths that should not be themed.
-                May include regular expressions.
-            extraurl
-                Optional filename or path to an extra xslt file that will be used 
-                when compiling
+        * ``rules``, the rules file
+        * ``theme``, the theme file
+        * ``extra``, an optional XSLT file with XDV extensions
+        * ``css``, can be set to False to disable CSS syntax support (providing
+          a  moderate speed gain)
+        * ``xinclude`` can be set to True to enable XInclude support (at a
+          moderate speed cost)
+        * ``absolute_prefix`` can be set to a string that will be prefixed to
+          any *relative* URL referenced in an image, link or stylesheet in the
+          theme HTML file before the theme is passed to the compiler. This
+          allows a theme to be written so that it can be opened and views
+          standalone on the filesystem, even if at runtime its static
+          resources are going to be served from some other location. For
+          example, an ``<img src="images/foo.jpg" />`` can be turned into 
+          ``<img src="/static/images/foo.jpg" />`` with an ``absolute_prefix``
+          of "/static".
+        * ``update`` can be set to False to disable the automatic update support for
+          the old Deliverance 0.2 namespace (for a moderate speed gain)
+        * ``includemode`` can be set to 'document', 'esi' or 'ssi' to change
+          the way in which includes are processed
+        * ``live``, set to True to recompile the theme on each request
+        * ``notheme``, a list of regular expressions for paths which should
+          not be themed.
         """
+        
+        if isinstance(notheme, basestring):
+            notheme = [p for p in notheme.split('\n') if p.strip()]
         
         self.app = app
         self.global_conf = global_conf
         
-        self.theme = theme
-        
-        # For BBB
-        if not theme and theme_uri:
-            self.theme = theme_uri
-        
-        self.compiler = compiler
-        self.boilerplate = boilerplate
-        self.extraurl = extraurl
-        self.rules = rules
-        
+        self.rules = resolveURL(rules)
+        self.theme = resolveURL(theme or theme_uri) # theme_uri is for BBB
+        self.extra = resolveURL(extra or extraurl) # extraurl is for BBB
+        self.css = css
+        self.xinclude = xinclude
         self.absolute_prefix = absolute_prefix
+        self.update = update
+        self.includemode = includemode
 
-        if compiler is None:
-            self.compiler = os.path.join(os.path.split(__file__)[0], 'compiler', 'compiler.xsl')
-
-        if not os.path.isfile(self.compiler):
-            raise ValueError("Compiler XSLT %s does not exist" % self.compiler)
-        if boilerplate and not os.path.isfile(self.boilerplate):
-            raise ValueError("Boilerplate XSLT %s does not exist" % self.boilerplate)
-        if extraurl and not os.path.isfile(self.extraurl):
-            raise ValueError("Extraurl XSLT %s does not exist" % self.extraurl)
-        
-        if not os.path.isfile(self.rules):
-            raise ValueError("Rules file %s does not exist" % self.rules)
-        
         self.live = asbool(live)
         self.notheme = notheme
-        self.transform = self.get_transform()
+        
+        self.transform = None
     
     def compile_theme(self):
-        return compile_theme(self.compiler, self.theme, self.rules,
-                             self.boilerplate, self.absolute_prefix, self.extraurl)
+        resolver = ExternalResolver()
+        
+        rules_parser = etree.XMLParser(recover=False)
+        rules_parser.resolvers.add(resolver)
+        
+        theme_parser = etree.HTMLParser()
+        theme_parser.resolvers.add(resolver)
+        
+        compiler_parser = etree.XMLParser()
+        compiler_parser.resolvers.add(resolver)
+        
+        return compile_theme(self.rules, self.theme,
+                extra=self.extra,
+                css=self.css,
+                xinclude=self.xinclude,
+                absolute_prefix=self.absolute_prefix,
+                update=self.update,
+                inclduemode=self.includemode,
+                compiler_parser=self.compiler_parser,
+                parser=self.theme_parser,
+                rules_parser=self.rules_parser,
+            )
     
     def get_transform(self):
-        return XSLTMiddleware(self.app, self.global_conf, 
-                                ignore_paths=self.notheme, xslt_source=self.compile_theme())
+        return XSLTMiddleware(self.app, self.global_conf,
+                ignore_paths=self.notheme,
+                xslt_source=self.compile_theme()
+            )
     
     def __call__(self, environ, start_response):
         transform = self.transform
-        if self.live:
+        if transform is None or self.live:
             transform = self.get_transform()
         return transform(environ, start_response)
