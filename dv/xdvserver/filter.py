@@ -10,7 +10,7 @@ from paste.response import header_value, replace_header
 from paste.wsgilib import intercept_output
 from paste.deploy.converters import asbool
 
-from xdv.copmiler import compile_theme
+from xdv.compiler import compile_theme
 
 IGNORE_EXTENSIONS = ['js', 'css', 'gif', 'jpg', 'jpeg', 'pdf', 'ps', 'doc',
                      'png', 'ico', 'mov', 'mpg', 'mpeg', 'mp3', 'm4a', 'txt',
@@ -68,20 +68,21 @@ class XSLTMiddleware(object):
     """Apply XSLT in middleware
     """
     
-    def __init__(self, app, global_conf, ignore_paths=None, xslt_file=None, xslt_source=""):
+    def __init__(self, app, global_conf, ignore_paths=None, xslt_file=None, xslt_source="", xslt_tree=None):
         """Initialise, giving a filename or file pointer for an XSLT file.
         """
         
         self.app = app
         self.global_conf = global_conf
-
-        if xslt_file is not None:
+        
+        if xslt_file:
             xslt_file = open(xslt_file)
             xslt_source = xslt_file.read()
             xslt_file.close()
         
-        xslt_source = xslt_source
-        xslt_tree = etree.fromstring(xslt_source)
+        if xslt_source:
+            xslt_tree = etree.fromstring(xslt_source)
+        
         self.transform = etree.XSLT(xslt_tree)
         
         self.ignore_paths = []
@@ -202,7 +203,7 @@ class XDVMiddleware(object):
         self.rules = resolveURL(rules)
         self.theme = resolveURL(theme or theme_uri) # theme_uri is for BBB
         self.extra = resolveURL(extra or extraurl) # extraurl is for BBB
-        self.css = css
+        self.css = asbool(css)
         self.xinclude = xinclude
         self.absolute_prefix = absolute_prefix
         self.update = update
@@ -231,20 +232,22 @@ class XDVMiddleware(object):
                 xinclude=self.xinclude,
                 absolute_prefix=self.absolute_prefix,
                 update=self.update,
-                inclduemode=self.includemode,
-                compiler_parser=self.compiler_parser,
-                parser=self.theme_parser,
-                rules_parser=self.rules_parser,
+                includemode=self.includemode,
+                compiler_parser=compiler_parser,
+                parser=theme_parser,
+                rules_parser=rules_parser,
             )
     
     def get_transform(self):
         return XSLTMiddleware(self.app, self.global_conf,
                 ignore_paths=self.notheme,
-                xslt_source=self.compile_theme()
+                xslt_tree=self.compile_theme()
             )
     
     def __call__(self, environ, start_response):
         transform = self.transform
         if transform is None or self.live:
             transform = self.get_transform()
+        if transform is not None and not self.live:
+            self.transform = transform
         return transform(environ, start_response)

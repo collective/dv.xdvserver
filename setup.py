@@ -28,7 +28,7 @@ setup(name='dv.xdvserver',
           'PasteDeploy',
           'PasteScript',
           'lxml',
-          # -*- Extra requirements: -*-
+          'xdv',
       ],
       entry_points="""
       [paste.filter_app_factory]
