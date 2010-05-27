@@ -4,6 +4,12 @@ Changelog
 1.0b7 - 
 ------------------
 
+* Use lxml for web resolving.
+  [elro]
+
+* Remove xdvcompiler.py (this is now in xdv)
+  [elro]
+
 * Apply patch from Lukas Zdych to fix absolute prefix.
   [optilude]
 

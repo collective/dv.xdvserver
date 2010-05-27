@@ -19,56 +19,13 @@ IGNORE_EXTENSIONS = ['js', 'css', 'gif', 'jpg', 'jpeg', 'pdf', 'ps', 'doc',
                     ]
 
 IGNORE_URL_PATTERN = re.compile("^.*\.(%s)$" % '|'.join(IGNORE_EXTENSIONS))
-HTML_DOC_PATTERN = re.compile(r"^.*<\s*html(\s*|>).*$",re.I|re.M)
 
-class ExternalResolver(etree.Resolver):
-    """Resolver for external absolute paths (including protocol)
-    """
-    
-    def resolve(self, system_url, public_id, context):
-        
-        # Expand python:// URI to file:// URI
-        url = resolveURL(system_url.lower())
-        
-        # Resolve file:// URIs as absolute file paths
-        if url.startswith('file://'):
-            filename = url[7:]
-            return self.resolve_filename(filename, context)
-        
-        # Resolve other standard URIs with urllib2
-        if (
-            url.startswith('http://') or
-            url.startswith('https://') or
-            url.startswith('ftp://')
-        ):
-            return self.resolve_file(urllib2.urlopen(url), context)
-
-def resolveURL(url):
-    """Resolve the input URL to an actual URL.
-    
-    This can resolve python://dotted.package.name/file/path URLs to file://
-    URIs.
-    """
-    
-    if not url:
-        return url
-    
-    if url.lower().startswith('python://'):
-        spec = url[9:]
-        filename = pkg_resources.resource_filename(*spec.split('/', 1))
-        if filename:
-            if os.path.sep != '/':
-                filename = filename.replace(os.path.sep, '/')
-                return 'file:///%s' % filename
-            return 'file://%s' % filename
-    
-    return url
 
 class XSLTMiddleware(object):
     """Apply XSLT in middleware
     """
     
-    def __init__(self, app, global_conf, ignore_paths=None, xslt_file=None, xslt_source="", xslt_tree=None):
+    def __init__(self, app, global_conf, ignore_paths=None, xslt_file=None, xslt_source="", xslt_tree=None, read_network=False):
         """Initialise, giving a filename or file pointer for an XSLT file.
         """
         
@@ -83,7 +40,9 @@ class XSLTMiddleware(object):
         if xslt_source:
             xslt_tree = etree.fromstring(xslt_source)
         
-        self.transform = etree.XSLT(xslt_tree)
+        self.read_network = read_network
+        self.access_control = etree.XSLTAccessControl(read_file=True, write_file=False, create_dir=False, read_network=read_network, write_network=False)
+        self.transform = etree.XSLT(xslt_tree, access_control=self.access_control)
         
         self.ignore_paths = []
         if ignore_paths:
@@ -106,6 +65,7 @@ class XSLTMiddleware(object):
                 content_type.startswith('application/xhtml+xml'))
     
     def apply_transform(self, environ, body):
+        
         content = etree.fromstring(body, parser=etree.HTMLParser())
         transformed = self.transform(content)
         return etree.tostring(transformed)
@@ -133,7 +93,7 @@ class XSLTMiddleware(object):
         
         # short circuit from theming if this is not likely to be HTML
         content_url = construct_url(environ)
-        if not self.is_html(body) or self.should_ignore_url(content_url):
+        if self.should_ignore_url(content_url):
             start_response(status, headers)
             return [body]
             
@@ -155,16 +115,14 @@ class XSLTMiddleware(object):
     def should_ignore_url(self, url): 
         return IGNORE_URL_PATTERN.search(url) is not None
 
-    def is_html(self, body):
-        return HTML_DOC_PATTERN.search(body) is not None
 
 class XDVMiddleware(object):
     """Invoke the Deliverance xdv transform as middleware
     """
     
     def __init__(self, app, global_conf, live=False, rules=None, theme=None, extra=None,
-                 css=True, xinclude=False, absolute_prefix=None, update=False,
-                 includemode='document', notheme=None,
+                 css=True, xinclude=True, absolute_prefix=None, update=False,
+                 includemode='document', notheme=None, read_network=False,
                  # BBB parameters
                  theme_uri=None, extraurl=None):
         """Create the middleware. The parameters are:
@@ -200,9 +158,9 @@ class XDVMiddleware(object):
         self.app = app
         self.global_conf = global_conf
         
-        self.rules = resolveURL(rules)
-        self.theme = resolveURL(theme or theme_uri) # theme_uri is for BBB
-        self.extra = resolveURL(extra or extraurl) # extraurl is for BBB
+        self.rules = rules
+        self.theme = theme or theme_uri # theme_uri is for BBB
+        self.extra = extra or extraurl # extraurl is for BBB
         self.css = asbool(css)
         self.xinclude = xinclude
         self.absolute_prefix = absolute_prefix
@@ -211,20 +169,12 @@ class XDVMiddleware(object):
 
         self.live = asbool(live)
         self.notheme = notheme
-        
+        self.read_network = read_network
+        self.access_control = etree.XSLTAccessControl(read_file=True, write_file=False, create_dir=False, read_network=read_network, write_network=False)
         self.transform = None
     
-    def compile_theme(self):
-        resolver = ExternalResolver()
-        
+    def compile_theme(self):        
         rules_parser = etree.XMLParser(recover=False)
-        rules_parser.resolvers.add(resolver)
-        
-        theme_parser = etree.HTMLParser()
-        theme_parser.resolvers.add(resolver)
-        
-        compiler_parser = etree.XMLParser()
-        compiler_parser.resolvers.add(resolver)
         
         return compile_theme(self.rules, self.theme,
                 extra=self.extra,
@@ -233,18 +183,19 @@ class XDVMiddleware(object):
                 absolute_prefix=self.absolute_prefix,
                 update=self.update,
                 includemode=self.includemode,
-                compiler_parser=compiler_parser,
-                parser=theme_parser,
                 rules_parser=rules_parser,
+                access_control=self.access_control,
             )
     
     def get_transform(self):
         return XSLTMiddleware(self.app, self.global_conf,
                 ignore_paths=self.notheme,
-                xslt_tree=self.compile_theme()
+                xslt_tree=self.compile_theme(),
+                read_network=self.read_network,
             )
     
     def __call__(self, environ, start_response):
+        
         transform = self.transform
         if transform is None or self.live:
             transform = self.get_transform()
