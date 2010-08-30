@@ -4,6 +4,7 @@ import pkg_resources
 import os.path
 
 from lxml import etree
+from lxml import html
 
 from paste.request import construct_url
 from paste.response import header_value, replace_header
@@ -68,7 +69,7 @@ class XSLTMiddleware(object):
         
         content = etree.fromstring(body, parser=etree.HTMLParser())
         transformed = self.transform(content)
-        return etree.tostring(transformed)
+        return html.tostring(transformed)
     
     def __call__(self, environ, start_response):
         

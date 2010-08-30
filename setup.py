@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import os
 
-version = '1.0b7'
+version = '1.0b9'
 
 setup(name='dv.xdvserver',
       version=version,

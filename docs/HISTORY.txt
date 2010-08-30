@@ -1,7 +1,14 @@
 Changelog
 =========
 
-1.0b7 - 
+1.0b8 - 2010-08-22
+------------------
+
+* use lxml.html.tostring instead of lxml.tostring for output to 
+  avoid empty tags like <script/>, which confuses browsers
+  [tomster]
+
+1.0b7 - 2010-08-19
 ------------------
 
 * Use lxml for web resolving.
